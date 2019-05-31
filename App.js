@@ -30,6 +30,12 @@ export default class App extends Component{
 		doNotDrag:false,//在drag LayoutAnimation時，禁止其他drag
 	};
 
+	onLayoutCount=0;//onLayout只跑一開始的兩次
+
+	componentDidMount(){
+		
+	}
+
 	componentWillUpdate(){//drag會swapDrag，會改變tags state，觸發componentWillUpdate
 		LayoutAnimation.easeInEaseOut();
 	}
@@ -127,15 +133,30 @@ export default class App extends Component{
 	removeTag=tag=>this.setState({tags:this.state.tags.filter(({title})=>title!==tag.title)});
 
 	//Swap two tags
-	swapTags=(draggedTag, anotherTag)=>{//交換同時暫時不準drag，300毫秒後再開放
-		this.setState(state=>({
-			tags:this.moveArrayElement(
-				state.tags,
-				state.tags.findIndex(({title})=>title===draggedTag.title),
-				state.tags.findIndex(({title})=>title===anotherTag.title),
-			),
-			doNotDrag:true,
-		}), ()=>setTimeout(()=>this.setState({doNotDrag:false}), 300));
+	swapTags=(draggedTag, anotherTag)=>{//交換同時跑動畫300ms，暫時不準drag，300ms後再開放
+		this.setState(({tags})=>{
+			tags.splice(//to，drag到這，加到drag到的tag的座標的index
+				tags.findIndex(({title})=>title===anotherTag.title),
+				0,
+				tags.splice(//from，從這要drag走，所以把這個tag的index切掉
+					tags.findIndex(({title})=>title===draggedTag.title),
+					1,
+				)[0],//切完後還是array，所以要[0]取出
+			);
+			return {
+				doNotDrag:true,
+			}
+		}, ()=>setTimeout(()=>{
+			for(let i=0;i<this.tags.length;i++){
+				this.tags[i].measure((x, y, width, height, screenX, screenY)=>this.updateTagState(this.state.tags[i], {
+					tlX:screenX,
+					tlY:screenY,
+					brX:screenX+width,
+					brY:screenY+height,
+				}));
+			}
+			this.setState({doNotDrag:false});
+		}, 300));
 	};
 
 	isPointWithinArea=(pointX,//x coordinate
@@ -149,31 +170,7 @@ export default class App extends Component{
 			&&areaTlY<=pointY&&pointY<=areaBrY;//is within vertical axis
 	};
 
-	moveArrayElement=(array,//array of objects
-		from,//element to move index
-		to,//index where to move
-	)=>{
-		if(to>array.length){//應該不會有這種情形發生，因為是findArray內的index
-			return array;
-		}
-
-		//Remove the element we need to move
-		const arr=[
-			...array.slice(0, from),
-			...array.slice(from+1),
-		];
-
-		//And add it back at a new position
-		return [
-			...arr.slice(0, to),
-			{
-				...array[from],
-			},
-			...arr.slice(to),
-		];
-	};
-
-	tag=[];
+	tags=[];
 	
 	render(){
 		const {tags}=this.state;
@@ -186,15 +183,20 @@ export default class App extends Component{
 							onPress={()=>{}}
 						>
 							<View
-								ref={tag=>this.tag[i]=tag}
+								ref={tag=>this.tags[i]=tag}
 								style={[styles.tag, tag.isBeingDragged?styles.tagBeingDragged:{}]}
 								onLayout={()=>{
-									this.tag[i]&&this.tag[i].measure((x, y, width, height, screenX, screenY)=>this.updateTagState(tag, {
-										tlX:screenX,
-										tlY:screenY,
-										brX:screenX+width,
-										brY:screenY+height,
-									}))
+									if(this.onLayoutCount<2){console.log(i);
+										this.tags[i]&&this.tags[i].measure((x, y, width, height, screenX, screenY)=>this.updateTagState(tag, {
+											tlX:screenX,
+											tlY:screenY,
+											brX:screenX+width,
+											brY:screenY+height,
+										}));
+										if(i===this.tags.length-1){
+											this.onLayoutCount++;
+										}
+									}
 								}}
 							>
 								<TouchableOpacity
